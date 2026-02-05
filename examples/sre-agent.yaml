@@ -1,0 +1,46 @@
+# Example: SRE Agent
+# An agent that can perform basic SRE tasks
+
+apiVersion: ai.adk.io/v1
+kind: Agent
+metadata:
+  name: sre-agent
+  namespace: default
+  labels:
+    team: platform
+    type: sre
+spec:
+  # Model to use (must be available in vLLM)
+  model: "codellama/CodeLlama-7b-Instruct-hf"
+  
+  # System prompt defining agent behavior
+  systemPrompt: |
+    You are an SRE (Site Reliability Engineering) agent.
+    Your job is to help with operational tasks like:
+    - Reading log files
+    - Checking system status
+    - Analyzing configurations
+    - Searching for patterns in files
+    
+    Always explain what you're doing and why.
+    Be careful with any commands that modify state.
+    When in doubt, ask for clarification.
+  
+  # Tools this agent can use
+  tools:
+    - read_file
+    - list_directory
+    - search_files
+    - shell
+    - calculator
+  
+  # Maximum steps per run
+  maxSteps: 15
+  
+  # Timeout per run (seconds)
+  timeout: 300
+  
+  # Resource limits for tool execution
+  resourceLimits:
+    cpuLimit: "1"
+    memoryLimit: "1Gi"

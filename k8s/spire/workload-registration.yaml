@@ -1,0 +1,66 @@
+# Workload Registration Entries
+# These tell SPIRE Server which workloads should get which SPIFFE IDs
+# Registration is done via spire-server CLI or Kubernetes CRDs
+
+# This ConfigMap contains registration scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-registration
+  namespace: spire
+data:
+  register-workloads.sh: |
+    #!/bin/sh
+    # Register ADK Controller
+    /opt/spire/bin/spire-server entry create \
+      -spiffeID spiffe://adk.local/ns/adk-system/workload/controller \
+      -parentID spiffe://adk.local/spire/agent/k8s_psat/adk-cluster \
+      -selector k8s:ns:adk-system \
+      -selector k8s:sa:adk-controller \
+      -x509SVIDTTL 3600  # 1 hour TTL
+    
+    # Register Agent Runs (wildcard for dynamic runs)
+    /opt/spire/bin/spire-server entry create \
+      -spiffeID spiffe://adk.local/ns/default/agent/sre-agent \
+      -parentID spiffe://adk.local/spire/agent/k8s_psat/adk-cluster \
+      -selector k8s:ns:default \
+      -selector k8s:pod-label:ai.adk.io/agent:sre-agent \
+      -x509SVIDTTL 300  # 5 minute TTL for agent runs
+    
+    # Register vLLM service
+    /opt/spire/bin/spire-server entry create \
+      -spiffeID spiffe://adk.local/ns/adk-system/service/vllm \
+      -parentID spiffe://adk.local/spire/agent/k8s_psat/adk-cluster \
+      -selector k8s:ns:adk-system \
+      -selector k8s:sa:vllm \
+      -x509SVIDTTL 3600
+    
+    echo "Workload registration complete"
+
+---
+# Job to run registration (run after SPIRE Server is ready)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spire-register-workloads
+  namespace: spire
+spec:
+  template:
+    spec:
+      serviceAccountName: spire-server
+      containers:
+        - name: register
+          image: ghcr.io/spiffe/spire-server:1.9.0
+          command:
+            - /bin/sh
+            - /scripts/register-workloads.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: spire-registration
+            defaultMode: 0755
+      restartPolicy: OnFailure
+  backoffLimit: 3

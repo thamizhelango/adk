@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adk-controller
+  namespace: adk-system
+  labels:
+    app.kubernetes.io/name: adk-controller
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: adk-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: adk-controller
+    spec:
+      serviceAccountName: adk-controller
+      containers:
+        - name: controller
+          image: adk-controller:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # vLLM endpoint
+            - name: VLLM_ENDPOINT
+              value: "http://vllm-service.adk-system:8000/v1"
+            
+            # Watch all namespaces (or set specific namespace)
+            # - name: WATCH_NAMESPACE
+            #   value: "default"
+            
+            # Sandbox configuration
+            - name: SANDBOX_IMAGE
+              value: "python:3.11-slim"
+            - name: USE_DOCKER_SANDBOX
+              value: "false"  # In K8s, we don't use Docker-in-Docker
+            
+            # Default model
+            - name: DEFAULT_MODEL
+              value: "codellama/CodeLlama-7b-Instruct-hf"
+          
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          
+          # Readiness probe
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

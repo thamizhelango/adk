@@ -1,0 +1,21 @@
+# Example: Coding Task
+# Ask the coding agent to write a function
+
+apiVersion: ai.adk.io/v1
+kind: AgentTask
+metadata:
+  name: create-hello-world
+  namespace: default
+spec:
+  agentRef: coding-agent
+  
+  goal: |
+    Create a Python file called 'hello.py' that contains a function 
+    called 'greet(name)' which returns a greeting message.
+    Also add a main block that demonstrates the function.
+  
+  context:
+    output_directory: "/workspace/output"
+  
+  priority: normal
+  maxRetries: 1

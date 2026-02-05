@@ -1,0 +1,26 @@
+# Example: Sample Task
+# Submit a task to the SRE agent
+
+apiVersion: ai.adk.io/v1
+kind: AgentTask
+metadata:
+  name: list-python-files
+  namespace: default
+spec:
+  # Reference to the agent
+  agentRef: sre-agent
+  
+  # The goal/instruction
+  goal: |
+    List all Python files in the current directory and subdirectories,
+    then tell me how many there are and what they seem to do based on their names.
+  
+  # Additional context (optional)
+  context:
+    working_directory: "/workspace"
+  
+  # Priority (optional)
+  priority: normal
+  
+  # Max retries on failure
+  maxRetries: 2

@@ -1,0 +1,110 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agentruns.ai.adk.io
+spec:
+  group: ai.adk.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - agentRef
+                - taskRef
+                - goal
+              properties:
+                agentRef:
+                  type: string
+                  description: "Name of the Agent"
+                taskRef:
+                  type: string
+                  description: "Name of the parent AgentTask"
+                goal:
+                  type: string
+                  description: "The goal to accomplish"
+                context:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                maxSteps:
+                  type: integer
+                  default: 10
+                timeout:
+                  type: integer
+                  default: 300
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Planning", "Executing", "Completed", "Failed"]
+                currentStep:
+                  type: integer
+                history:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      step:
+                        type: integer
+                      type:
+                        type: string
+                        enum: ["plan", "tool_call", "tool_result", "thought", "error"]
+                      timestamp:
+                        type: string
+                        format: date-time
+                      data:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                result:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                error:
+                  type: string
+                startTime:
+                  type: string
+                  format: date-time
+                completionTime:
+                  type: string
+                  format: date-time
+                resourcesUsed:
+                  type: object
+                  properties:
+                    llmTokens:
+                      type: integer
+                    toolExecutions:
+                      type: integer
+                    wallTimeSeconds:
+                      type: number
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Agent
+          type: string
+          jsonPath: .spec.agentRef
+        - name: Task
+          type: string
+          jsonPath: .spec.taskRef
+        - name: Status
+          type: string
+          jsonPath: .status.phase
+        - name: Step
+          type: integer
+          jsonPath: .status.currentStep
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+  scope: Namespaced
+  names:
+    plural: agentruns
+    singular: agentrun
+    kind: AgentRun
+    shortNames:
+      - arun

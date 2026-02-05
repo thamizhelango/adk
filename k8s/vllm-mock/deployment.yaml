@@ -1,0 +1,114 @@
+# Mock vLLM Service for Testing
+# This simulates vLLM responses without requiring a GPU
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-mock
+  namespace: adk-system
+  labels:
+    app.kubernetes.io/name: vllm-mock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm-mock
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm-mock
+    spec:
+      containers:
+        - name: mock
+          image: python:3.11-slim
+          command:
+            - python
+            - -c
+            - |
+              from http.server import HTTPServer, BaseHTTPRequestHandler
+              import json
+              
+              class MockVLLM(BaseHTTPRequestHandler):
+                  def do_POST(self):
+                      content_length = int(self.headers.get('Content-Length', 0))
+                      body = self.rfile.read(content_length).decode('utf-8')
+                      request = json.loads(body) if body else {}
+                      
+                      messages = request.get('messages', [])
+                      
+                      # Simple mock response
+                      if any('finish' in str(m).lower() or 'done' in str(m).lower() 
+                             for m in messages[-2:] if isinstance(m, dict)):
+                          response_content = json.dumps({
+                              "action": "finish",
+                              "thought": "Task completed successfully",
+                              "answer": "I have completed the requested task."
+                          })
+                      else:
+                          # Default to a simple tool call
+                          response_content = json.dumps({
+                              "action": "tool_call",
+                              "thought": "I need to list the directory to understand the structure",
+                              "tool": "list_directory",
+                              "args": {"path": "."}
+                          })
+                      
+                      response = {
+                          "id": "mock-response",
+                          "object": "chat.completion",
+                          "choices": [{
+                              "index": 0,
+                              "message": {
+                                  "role": "assistant",
+                                  "content": response_content
+                              },
+                              "finish_reason": "stop"
+                          }],
+                          "usage": {
+                              "prompt_tokens": 100,
+                              "completion_tokens": 50,
+                              "total_tokens": 150
+                          }
+                      }
+                      
+                      self.send_response(200)
+                      self.send_header('Content-Type', 'application/json')
+                      self.end_headers()
+                      self.wfile.write(json.dumps(response).encode())
+                  
+                  def do_GET(self):
+                      if self.path == '/health':
+                          self.send_response(200)
+                          self.end_headers()
+                          self.wfile.write(b'OK')
+                      else:
+                          self.send_response(404)
+                          self.end_headers()
+              
+              print("Starting mock vLLM on port 8000...")
+              HTTPServer(('0.0.0.0', 8000), MockVLLM).serve_forever()
+          ports:
+            - containerPort: 8000
+              name: http
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-service
+  namespace: adk-system
+spec:
+  selector:
+    app.kubernetes.io/name: vllm-mock
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  type: ClusterIP

@@ -1,0 +1,169 @@
+# SPIRE Agent DaemonSet
+# Runs on every node and provides the Workload API to pods
+# Handles local key generation and SVID delivery
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-agent-config
+  namespace: spire
+data:
+  agent.conf: |
+    agent {
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      server_address = "spire-server"
+      server_port = "8081"
+      trust_domain = "adk.local"
+      
+      # Socket for workloads to connect to
+      socket_path = "/run/spire/sockets/agent.sock"
+      
+      # Node attestation - prove this agent's identity to server
+      node_attestor "k8s_psat" {
+        plugin_data {
+          cluster = "adk-cluster"
+        }
+      }
+      
+      # Key manager - generates private keys LOCALLY
+      key_manager "disk" {
+        plugin_data {
+          directory = "/run/spire/data"
+        }
+      }
+      
+      # Workload attestation - how to identify workloads requesting SVIDs
+      workload_attestor "k8s" {
+        plugin_data {
+          # Verify pod identity
+          skip_kubelet_verification = true
+        }
+      }
+    }
+
+---
+# SPIRE Agent DaemonSet (runs on every node)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+  labels:
+    app: spire-agent
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent
+  template:
+    metadata:
+      labels:
+        app: spire-agent
+    spec:
+      serviceAccountName: spire-agent
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+        # Wait for SPIRE Server to be ready
+        - name: init-wait
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z spire-server.spire 8081; do
+                echo "Waiting for SPIRE Server..."
+                sleep 2
+              done
+      containers:
+        - name: spire-agent
+          image: ghcr.io/spiffe/spire-agent:1.9.0
+          args:
+            - "-config"
+            - "/run/spire/config/agent.conf"
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: data
+              mountPath: /run/spire/data
+            - name: sockets
+              mountPath: /run/spire/sockets
+            - name: agent-token
+              mountPath: /var/run/secrets/tokens
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          livenessProbe:
+            exec:
+              command:
+                - /opt/spire/bin/spire-agent
+                - healthcheck
+                - -socketPath
+                - /run/spire/sockets/agent.sock
+            initialDelaySeconds: 15
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+                - /opt/spire/bin/spire-agent
+                - healthcheck
+                - -socketPath
+                - /run/spire/sockets/agent.sock
+            initialDelaySeconds: 5
+            periodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: spire-agent-config
+        - name: data
+          hostPath:
+            path: /run/spire/agent-data
+            type: DirectoryOrCreate
+        - name: sockets
+          hostPath:
+            path: /run/spire/sockets
+            type: DirectoryOrCreate
+        - name: agent-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: spire-agent
+                  expirationSeconds: 7200
+                  audience: spire-server
+
+---
+# SPIRE Agent ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: spire
+
+---
+# SPIRE Agent ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-agent-role
+rules:
+  # For k8s workload attestation
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+
+---
+# SPIRE Agent ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-agent-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spire-agent-role
+subjects:
+  - kind: ServiceAccount
+    name: spire-agent
+    namespace: spire

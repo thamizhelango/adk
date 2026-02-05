@@ -1,0 +1,41 @@
+# Example: Coding Agent
+# An agent that can read and write code
+
+apiVersion: ai.adk.io/v1
+kind: Agent
+metadata:
+  name: coding-agent
+  namespace: default
+  labels:
+    team: engineering
+    type: coding
+spec:
+  model: "codellama/CodeLlama-7b-Instruct-hf"
+  
+  systemPrompt: |
+    You are a coding assistant agent.
+    Your job is to help with programming tasks:
+    - Reading and understanding code
+    - Writing new code
+    - Refactoring existing code
+    - Finding bugs and issues
+    
+    Follow best practices:
+    - Write clean, readable code
+    - Add comments where helpful
+    - Consider edge cases
+    - Test your changes when possible
+  
+  tools:
+    - read_file
+    - write_file
+    - list_directory
+    - search_files
+    - python_eval
+  
+  maxSteps: 20
+  timeout: 600
+  
+  resourceLimits:
+    cpuLimit: "2"
+    memoryLimit: "2Gi"

@@ -1,0 +1,89 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agents.ai.adk.io
+spec:
+  group: ai.adk.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - model
+                - systemPrompt
+              properties:
+                model:
+                  type: string
+                  description: "LLM model to use (e.g., codellama/CodeLlama-34b-Instruct-hf)"
+                systemPrompt:
+                  type: string
+                  description: "System prompt defining agent behavior"
+                tools:
+                  type: array
+                  items:
+                    type: string
+                  description: "List of allowed tool names"
+                maxSteps:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 100
+                  description: "Maximum reasoning steps per run"
+                timeout:
+                  type: integer
+                  default: 300
+                  description: "Timeout in seconds for each run"
+                resourceLimits:
+                  type: object
+                  properties:
+                    cpuLimit:
+                      type: string
+                      default: "1"
+                    memoryLimit:
+                      type: string
+                      default: "1Gi"
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Active", "Inactive", "Error"]
+                totalRuns:
+                  type: integer
+                successfulRuns:
+                  type: integer
+                failedRuns:
+                  type: integer
+                lastRunTime:
+                  type: string
+                  format: date-time
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Model
+          type: string
+          jsonPath: .spec.model
+        - name: Tools
+          type: string
+          jsonPath: .spec.tools
+        - name: Status
+          type: string
+          jsonPath: .status.phase
+        - name: Runs
+          type: integer
+          jsonPath: .status.totalRuns
+  scope: Namespaced
+  names:
+    plural: agents
+    singular: agent
+    kind: Agent
+    shortNames:
+      - ag

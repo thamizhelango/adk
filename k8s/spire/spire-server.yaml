@@ -1,0 +1,172 @@
+# SPIRE Server Deployment
+# The SPIRE Server acts as the Certificate Authority (CA)
+# It issues SVIDs to workloads via SPIRE Agents
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire
+
+---
+# SPIRE Server ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server-config
+  namespace: spire
+data:
+  server.conf: |
+    server {
+      bind_address = "0.0.0.0"
+      bind_port = "8081"
+      trust_domain = "adk.local"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      
+      # CA configuration
+      ca_ttl = "24h"
+      default_x509_svid_ttl = "1h"  # Short-lived certificates!
+      
+      # Database (SQLite for demo, use PostgreSQL in production)
+      datastore {
+        sql {
+          database_type = "sqlite3"
+          connection_string = "/run/spire/data/datastore.sqlite3"
+        }
+      }
+      
+      # Node attestation - how agents prove their identity
+      node_attestor "k8s_psat" {
+        plugin_data {
+          clusters = {
+            "adk-cluster" = {
+              service_account_allow_list = ["spire:spire-agent"]
+            }
+          }
+        }
+      }
+      
+      # Key manager
+      key_manager "disk" {
+        plugin_data {
+          keys_path = "/run/spire/data/keys.json"
+        }
+      }
+    }
+
+---
+# SPIRE Server StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server
+  namespace: spire
+  labels:
+    app: spire-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spire-server
+  serviceName: spire-server
+  template:
+    metadata:
+      labels:
+        app: spire-server
+    spec:
+      serviceAccountName: spire-server
+      containers:
+        - name: spire-server
+          image: ghcr.io/spiffe/spire-server:1.9.0
+          args:
+            - "-config"
+            - "/run/spire/config/server.conf"
+          ports:
+            - containerPort: 8081
+              name: grpc
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: data
+              mountPath: /run/spire/data
+          livenessProbe:
+            exec:
+              command:
+                - /opt/spire/bin/spire-server
+                - healthcheck
+            initialDelaySeconds: 15
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+                - /opt/spire/bin/spire-server
+                - healthcheck
+            initialDelaySeconds: 5
+            periodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: spire-server-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+# SPIRE Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-server
+  namespace: spire
+spec:
+  selector:
+    app: spire-server
+  ports:
+    - port: 8081
+      targetPort: 8081
+      name: grpc
+  type: ClusterIP
+
+---
+# SPIRE Server ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-server
+  namespace: spire
+
+---
+# SPIRE Server ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-server-role
+rules:
+  # For k8s_psat node attestation
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+
+---
+# SPIRE Server ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-server-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spire-server-role
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: spire

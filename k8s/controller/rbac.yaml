@@ -1,0 +1,54 @@
+---
+# Service Account for the controller
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adk-controller
+  namespace: adk-system
+
+---
+# ClusterRole with permissions for CRDs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: adk-controller-role
+rules:
+  # Access to our custom resources
+  - apiGroups: ["ai.adk.io"]
+    resources: ["agents", "agenttasks", "agentruns"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Access to status subresources
+  - apiGroups: ["ai.adk.io"]
+    resources: ["agents/status", "agenttasks/status", "agentruns/status"]
+    verbs: ["get", "update", "patch"]
+  
+  # Access to events (for logging)
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  
+  # Access to configmaps (for tool definitions)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # Access to secrets (for API keys, etc.)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: adk-controller-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: adk-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: adk-controller
+    namespace: adk-system
