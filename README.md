@@ -6,16 +6,16 @@ A complete, working implementation of a self-hosted Agentic AI platform using Ku
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Kubernetes Cluster                       │
-│                                                              │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │   CRDs      │    │ Controllers │    │  Execution  │     │
-│  │             │    │             │    │             │     │
-│  │ Agent       │───▶│ agent-ctrl  │───▶│ vLLM        │     │
-│  │ AgentTask   │    │ task-ctrl   │    │ Sandbox     │     │
-│  │ AgentRun    │    │ run-ctrl    │    │ Tools       │     │
-│  └─────────────┘    └─────────────┘    └─────────────┘     │
-│                                                              │
+│                     Kubernetes Cluster                      │
+│                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐      │
+│  │   CRDs      │    │ Controllers │    │  Execution  │      │
+│  │             │    │             │    │             │      │
+│  │ Agent       │───▶│ agent-ctrl  │───▶│ vLLM        │      │
+│  │ AgentTask   │    │ task-ctrl   │    │ Sandbox     │      │
+│  │ AgentRun    │    │ run-ctrl    │    │ Tools       │      │
+│  └─────────────┘    └─────────────┘    └─────────────┘      │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
